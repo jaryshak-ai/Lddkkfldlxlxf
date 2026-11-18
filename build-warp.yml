@@ -1,0 +1,1412 @@
+name: Build Warp plugin
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create project files
+        run: |
+          mkdir -p plugin/src/main/java/ru/eclips/warp plugin/src/main/resources
+          cat > plugin/pom.xml <<'EOF_POM'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <project xmlns="http://maven.apache.org/POM/4.0.0"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+              <modelVersion>4.0.0</modelVersion>
+
+              <groupId>ru.eclips</groupId>
+              <artifactId>Warp</artifactId>
+              <version>1.0.0</version>
+              <packaging>jar</packaging>
+              <name>Warp</name>
+
+              <properties>
+                  <maven.compiler.source>17</maven.compiler.source>
+                  <maven.compiler.target>17</maven.compiler.target>
+                  <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+                  <nukkit.groupId>cn.nukkit</nukkit.groupId>
+                  <nukkit.artifactId>Nukkit</nukkit.artifactId>
+                  <nukkit.version>MOT-SNAPSHOT</nukkit.version>
+              </properties>
+
+              <repositories>
+                  <repository>
+                      <id>repo-lanink-cn</id>
+                      <url>https://repo.lanink.cn/repository/maven-public/</url>
+                  </repository>
+                  <repository>
+                      <id>opencollab-repo-release</id>
+                      <url>https://repo.opencollab.dev/maven-releases/</url>
+                      <releases><enabled>true</enabled></releases>
+                      <snapshots><enabled>false</enabled></snapshots>
+                  </repository>
+                  <repository>
+                      <id>opencollab-repo-snapshot</id>
+                      <url>https://repo.opencollab.dev/maven-snapshots/</url>
+                      <releases><enabled>false</enabled></releases>
+                      <snapshots><enabled>true</enabled></snapshots>
+                  </repository>
+                  <repository>
+                      <id>okaeri-releases</id>
+                      <url>https://repo.okaeri.cloud/releases</url>
+                  </repository>
+                  <repository>
+                      <id>porklib-maven</id>
+                      <url>https://maven.daporkchop.net/</url>
+                  </repository>
+              </repositories>
+
+              <dependencies>
+                  <dependency>
+                      <groupId>${nukkit.groupId}</groupId>
+                      <artifactId>${nukkit.artifactId}</artifactId>
+                      <version>${nukkit.version}</version>
+                      <scope>provided</scope>
+                  </dependency>
+              </dependencies>
+
+              <build>
+                  <finalName>Warp-${project.version}</finalName>
+                  <plugins>
+                      <plugin>
+                          <groupId>org.apache.maven.plugins</groupId>
+                          <artifactId>maven-compiler-plugin</artifactId>
+                          <version>3.11.0</version>
+                          <configuration>
+                              <release>17</release>
+                              <encoding>UTF-8</encoding>
+                          </configuration>
+                      </plugin>
+                  </plugins>
+              </build>
+          </project>
+          EOF_POM
+          cat > plugin/src/main/resources/plugin.yml <<'EOF_PLUGIN_YML'
+          name: Warp
+          main: ru.eclips.warp.WarpPlugin
+          version: "1.0.0"
+          api: ["1.0.0"]
+          author: Eclips
+          description: Варпы сервера с графической админ-панелью
+          load: POSTWORLD
+          commands:
+            warp:
+              description: Варпы сервера
+              usage: /warp [название]
+              permission: warp.use
+            warpadmin:
+              description: Админ-панель варпов
+              usage: /warpadmin [reload]
+              permission: warp.admin
+          permissions:
+            warp.use:
+              description: Пользоваться варпами
+              default: true
+            warp.admin:
+              description: Управлять варпами
+              default: op
+          EOF_PLUGIN_YML
+          cat > plugin/src/main/resources/config.yml <<'EOF_CONFIG_YML'
+          # ============================================================
+          #  Warp: настройки плагина варпов сервера Eclips
+          #  После правки выполните /warpadmin reload (или перезапустите сервер).
+          #  Цвета в сообщениях: через символ &, например &6 (золотой), &c (красный).
+          # ============================================================
+
+          # Сколько варпов показывать на одной странице меню (от 1 до 20).
+          page-size: 8
+
+          # Задержка перед телепортом, в секундах. Действует ВНЕ спавна.
+          # На спавне телепорт всегда мгновенный.
+          teleport-delay-seconds: 5
+
+          # Кулдаун между телепортами на варпы, в секундах. Действует ВНЕ спавна.
+          cooldown-seconds: 5
+
+          # Отменять ожидающий телепорт, если игрок подвигался.
+          cancel-on-move: true
+
+          # Насколько блоков можно сместиться, чтобы это не считалось движением.
+          move-tolerance: 0.35
+
+          # Отменять ожидающий телепорт, если игрок получил урон.
+          cancel-on-damage: true
+
+          # ------------------------------------------------------------
+          #  Что считается спавном (там телепорт мгновенный)
+          # ------------------------------------------------------------
+          # Номер мира из MultiWorld, который является спавном.
+          # Папка мира ищется по шаблону ниже ({id} заменяется на номер): мир 8 = папка mw8.
+          spawn-world-id: 8
+
+          # Шаблоны названий папок мира для номера выше.
+          spawn-world-name-patterns:
+            - "mw{id}"
+
+          # Если шаблоны не угадали название папки мира, самый простой способ:
+          # встаньте в мир-спавн, откройте /warpadmin -> Миры -> "Назначить этот мир спавном".
+          # Либо впишите названия папок миров вручную (если список не пуст,
+          # шаблоны выше не используются):
+          spawn-levels: []
+
+          # Миры, из которых нельзя телепортироваться на варпы (например, мир босс-ивента).
+          # Можно также выбрать мир кнопкой в /warpadmin -> Миры.
+          blocked-levels: []
+
+          # ------------------------------------------------------------
+          #  Названия варпов и кнопки
+          # ------------------------------------------------------------
+          # Максимальная длина названия без учёта цветовых кодов.
+          max-name-length: 20
+
+          # false: названия на кнопках чёрные и жирные (хорошо читаются на серых кнопках).
+          # true: на кнопках сохраняются цвета, заданные в названии варпа.
+          button-keep-warp-colors: false
+
+          # ------------------------------------------------------------
+          #  Сообщения. Подстановки: {name} (название варпа), {sec} (секунды)
+          # ------------------------------------------------------------
+          msg-prefix: "&6[Варп] &r"
+          msg-not-found: "&cВарп не найден."
+          msg-start: "&6Телепорт на варп &r{name}&6 через &e{sec}&6 сек. Не двигайтесь и избегайте урона."
+          msg-countdown: "&6Телепорт через &e{sec}&6 сек."
+          msg-cancel-move: "&cТелепорт отменён: вы подвигались."
+          msg-cancel-damage: "&cТелепорт отменён: вы получили урон."
+          msg-cooldown: "&cПодождите ещё {sec} сек. перед следующим телепортом."
+          msg-already: "&cТелепорт уже идёт."
+          msg-blocked: "&cИз этого мира телепорт на варпы недоступен."
+          msg-done: "&6Вы телепортированы на варп &r{name}&6."
+          EOF_CONFIG_YML
+          cat > plugin/src/main/java/ru/eclips/warp/Text.java <<'EOF_TEXT'
+          package ru.eclips.warp;
+
+          import java.util.Locale;
+
+          /** Вспомогательные функции для текста и цветовых кодов. */
+          public final class Text {
+
+              private Text() {
+              }
+
+              /** Заменяет &-коды на §-коды. */
+              public static String color(String s) {
+                  if (s == null) {
+                      return "";
+                  }
+                  return s.replaceAll("(?i)&([0-9a-fk-or])", "\u00A7$1");
+              }
+
+              /** Убирает все цветовые коды (& и §). */
+              public static String strip(String s) {
+                  if (s == null) {
+                      return "";
+                  }
+                  return s.replaceAll("(?i)[&\u00A7][0-9a-fk-or]", "");
+              }
+
+              /** Текст без цветов, с одиночными пробелами по краям и внутри. */
+              public static String plain(String s) {
+                  return strip(s).replaceAll("\\s+", " ").trim();
+              }
+
+              /** Ключ для сравнения названий: без цветов, без регистра, "_" равно пробелу. */
+              public static String key(String s) {
+                  return plain(s).replace('_', ' ').replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+              }
+
+              /** Разрешены буквы, цифры, пробел и дефис. */
+              public static boolean validChars(String plain) {
+                  return plain != null && plain.matches("[\\p{L}\\p{N} \\-]+");
+              }
+          }
+          EOF_TEXT
+          cat > plugin/src/main/java/ru/eclips/warp/Warp.java <<'EOF_WARP'
+          package ru.eclips.warp;
+
+          /** Один варп сервера. */
+          public class Warp {
+
+              public final String id;
+              /** Название с цветовыми кодами через &. */
+              public String name;
+              /** Название папки мира. */
+              public String level;
+              public double x;
+              public double y;
+              public double z;
+              public double yaw;
+              public double pitch;
+              public boolean enabled = true;
+              public long created;
+
+              public Warp(String id) {
+                  this.id = id;
+              }
+          }
+          EOF_WARP
+          cat > plugin/src/main/java/ru/eclips/warp/WarpManager.java <<'EOF_MANAGER'
+          package ru.eclips.warp;
+
+          import cn.nukkit.utils.Config;
+
+          import java.io.File;
+          import java.nio.file.Files;
+          import java.nio.file.StandardCopyOption;
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.LinkedHashMap;
+          import java.util.LinkedHashSet;
+          import java.util.List;
+          import java.util.Map;
+          import java.util.Set;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          import java.util.concurrent.TimeUnit;
+
+          /** Хранение варпов и настроек миров в warps.yml (запись на диск в отдельном потоке). */
+          public class WarpManager {
+
+              private final WarpPlugin plugin;
+              private final File file;
+              private final List<Warp> warps = new ArrayList<>();
+
+              /** Миры-спавны, выбранные админом через панель (папки миров в нижнем регистре). */
+              public final Set<String> spawnLevels = new LinkedHashSet<>();
+              /** Миры, из которых запрещён телепорт, выбранные админом через панель. */
+              public final Set<String> blockedLevels = new LinkedHashSet<>();
+
+              private int nextId = 1;
+              private final Object writeLock = new Object();
+              private final ExecutorService io = Executors.newSingleThreadExecutor(r -> {
+                  Thread t = new Thread(r, "Warp-IO");
+                  t.setDaemon(true);
+                  return t;
+              });
+
+              public WarpManager(WarpPlugin plugin) {
+                  this.plugin = plugin;
+                  this.file = new File(plugin.getDataFolder(), "warps.yml");
+              }
+
+              // ------------------------------------------------------------------
+              // Загрузка
+              // ------------------------------------------------------------------
+
+              public void load() {
+                  warps.clear();
+                  spawnLevels.clear();
+                  blockedLevels.clear();
+                  if (!file.exists()) {
+                      return;
+                  }
+                  try {
+                      Config cfg = new Config(file, Config.YAML);
+                      nextId = (int) num(cfg.get("next-id"), 1);
+                      Object list = cfg.get("warps");
+                      if (list instanceof List) {
+                          for (Object it : (List<?>) list) {
+                              if (!(it instanceof Map)) {
+                                  continue;
+                              }
+                              Map<?, ?> m = (Map<?, ?>) it;
+                              String id = str(m.get("id"), "");
+                              String name = str(m.get("name"), "");
+                              String level = str(m.get("level"), "");
+                              if (id.isEmpty() || name.isEmpty() || level.isEmpty() || byId(id) != null) {
+                                  continue;
+                              }
+                              Warp w = new Warp(id);
+                              w.name = name;
+                              w.level = level;
+                              w.x = num(m.get("x"), 0);
+                              w.y = num(m.get("y"), 64);
+                              w.z = num(m.get("z"), 0);
+                              w.yaw = num(m.get("yaw"), 0);
+                              w.pitch = num(m.get("pitch"), 0);
+                              Object en = m.get("enabled");
+                              w.enabled = en == null || Boolean.parseBoolean(String.valueOf(en));
+                              w.created = (long) num(m.get("created"), 0);
+                              warps.add(w);
+                          }
+                      }
+                      Object st = cfg.get("settings");
+                      if (st instanceof Map) {
+                          Map<?, ?> sm = (Map<?, ?>) st;
+                          readSet(sm.get("spawn-levels"), spawnLevels);
+                          readSet(sm.get("blocked-levels"), blockedLevels);
+                      }
+                      for (Warp w : warps) {
+                          if (w.id.startsWith("w")) {
+                              try {
+                                  int n = Integer.parseInt(w.id.substring(1));
+                                  if (n >= nextId) {
+                                      nextId = n + 1;
+                                  }
+                              } catch (NumberFormatException ignored) {
+                                  // нестандартный id, пропускаем
+                              }
+                          }
+                      }
+                  } catch (Throwable t) {
+                      plugin.getLogger().warning("Warp: не удалось прочитать warps.yml: " + t);
+                      try {
+                          File backup = new File(plugin.getDataFolder(), "warps.broken-" + System.currentTimeMillis() + ".yml");
+                          Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                      } catch (Throwable ignored) {
+                          // резервная копия не получилась
+                      }
+                  }
+              }
+
+              private static void readSet(Object o, Set<String> target) {
+                  if (o instanceof List) {
+                      for (Object it : (List<?>) o) {
+                          if (it != null) {
+                              String s = String.valueOf(it).trim().toLowerCase(java.util.Locale.ROOT);
+                              if (!s.isEmpty()) {
+                                  target.add(s);
+                              }
+                          }
+                      }
+                  }
+              }
+
+              private static double num(Object o, double def) {
+                  if (o instanceof Number) {
+                      return ((Number) o).doubleValue();
+                  }
+                  if (o != null) {
+                      try {
+                          return Double.parseDouble(String.valueOf(o));
+                      } catch (NumberFormatException ignored) {
+                          return def;
+                      }
+                  }
+                  return def;
+              }
+
+              private static String str(Object o, String def) {
+                  return o == null ? def : String.valueOf(o);
+              }
+
+              // ------------------------------------------------------------------
+              // Сохранение
+              // ------------------------------------------------------------------
+
+              private LinkedHashMap<String, Object> buildRoot() {
+                  LinkedHashMap<String, Object> root = new LinkedHashMap<>();
+                  root.put("next-id", nextId);
+                  List<Object> list = new ArrayList<>();
+                  for (Warp w : warps) {
+                      LinkedHashMap<String, Object> m = new LinkedHashMap<>();
+                      m.put("id", w.id);
+                      m.put("name", w.name);
+                      m.put("level", w.level);
+                      m.put("x", w.x);
+                      m.put("y", w.y);
+                      m.put("z", w.z);
+                      m.put("yaw", w.yaw);
+                      m.put("pitch", w.pitch);
+                      m.put("enabled", w.enabled);
+                      m.put("created", w.created);
+                      list.add(m);
+                  }
+                  root.put("warps", list);
+                  LinkedHashMap<String, Object> st = new LinkedHashMap<>();
+                  st.put("spawn-levels", new ArrayList<>(spawnLevels));
+                  st.put("blocked-levels", new ArrayList<>(blockedLevels));
+                  root.put("settings", st);
+                  return root;
+              }
+
+              /** Сохраняет данные асинхронно. */
+              public void save() {
+                  final LinkedHashMap<String, Object> root = buildRoot();
+                  try {
+                      io.execute(() -> write(root));
+                  } catch (Throwable t) {
+                      write(root);
+                  }
+              }
+
+              private void write(LinkedHashMap<String, Object> root) {
+                  synchronized (writeLock) {
+                      try {
+                          plugin.getDataFolder().mkdirs();
+                          Config cfg = new Config(file, Config.YAML);
+                          cfg.setAll(root);
+                          cfg.save();
+                      } catch (Throwable t) {
+                          plugin.getLogger().warning("Warp: не удалось сохранить warps.yml: " + t);
+                      }
+                  }
+              }
+
+              /** Дожидается записи и сохраняет финальное состояние (при выключении). */
+              public void shutdown() {
+                  io.shutdown();
+                  try {
+                      io.awaitTermination(5, TimeUnit.SECONDS);
+                  } catch (InterruptedException ignored) {
+                      Thread.currentThread().interrupt();
+                  }
+                  write(buildRoot());
+              }
+
+              // ------------------------------------------------------------------
+              // Операции
+              // ------------------------------------------------------------------
+
+              public List<Warp> all() {
+                  return new ArrayList<>(warps);
+              }
+
+              public Warp byId(String id) {
+                  if (id == null) {
+                      return null;
+                  }
+                  for (Warp w : warps) {
+                      if (w.id.equals(id)) {
+                          return w;
+                      }
+                  }
+                  return null;
+              }
+
+              public Warp byName(String input) {
+                  String k = Text.key(input);
+                  if (k.isEmpty()) {
+                      return null;
+                  }
+                  for (Warp w : warps) {
+                      if (Text.key(w.name).equals(k)) {
+                          return w;
+                      }
+                  }
+                  return null;
+              }
+
+              public boolean nameTaken(String plainName, String exceptId) {
+                  String k = Text.key(plainName);
+                  for (Warp w : warps) {
+                      if (exceptId != null && w.id.equals(exceptId)) {
+                          continue;
+                      }
+                      if (Text.key(w.name).equals(k)) {
+                          return true;
+                      }
+                  }
+                  return false;
+              }
+
+              public Warp create(String name, String level, double x, double y, double z, double yaw, double pitch) {
+                  Warp w = new Warp("w" + (nextId++));
+                  w.name = name;
+                  w.level = level;
+                  w.x = x;
+                  w.y = y;
+                  w.z = z;
+                  w.yaw = yaw;
+                  w.pitch = pitch;
+                  w.enabled = true;
+                  w.created = System.currentTimeMillis();
+                  warps.add(w);
+                  save();
+                  return w;
+              }
+
+              public void remove(Warp w) {
+                  warps.remove(w);
+                  save();
+              }
+
+              /** Сдвигает варп в списке: -1 выше, +1 ниже. */
+              public void move(Warp w, int delta) {
+                  int i = warps.indexOf(w);
+                  int j = i + delta;
+                  if (i < 0 || j < 0 || j >= warps.size()) {
+                      return;
+                  }
+                  Collections.swap(warps, i, j);
+                  save();
+              }
+          }
+          EOF_MANAGER
+          cat > plugin/src/main/java/ru/eclips/warp/WarpPlugin.java <<'EOF_PLUGIN'
+          package ru.eclips.warp;
+
+          import cn.nukkit.Player;
+          import cn.nukkit.command.Command;
+          import cn.nukkit.command.CommandSender;
+          import cn.nukkit.event.EventHandler;
+          import cn.nukkit.event.EventPriority;
+          import cn.nukkit.event.Listener;
+          import cn.nukkit.event.entity.EntityDamageEvent;
+          import cn.nukkit.event.player.PlayerFormRespondedEvent;
+          import cn.nukkit.event.player.PlayerQuitEvent;
+          import cn.nukkit.form.element.ElementButton;
+          import cn.nukkit.form.element.ElementInput;
+          import cn.nukkit.form.response.FormResponse;
+          import cn.nukkit.form.response.FormResponseCustom;
+          import cn.nukkit.form.response.FormResponseSimple;
+          import cn.nukkit.form.window.FormWindow;
+          import cn.nukkit.form.window.FormWindowCustom;
+          import cn.nukkit.form.window.FormWindowSimple;
+          import cn.nukkit.level.Level;
+          import cn.nukkit.level.Location;
+          import cn.nukkit.plugin.PluginBase;
+          import cn.nukkit.scheduler.Task;
+
+          import java.io.File;
+          import java.util.ArrayList;
+          import java.util.Arrays;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Locale;
+          import java.util.Map;
+          import java.util.UUID;
+          import java.util.function.Consumer;
+
+          /** Варпы сервера Eclips: /warp (меню для игроков) и /warpadmin (админ-панель). */
+          public class WarpPlugin extends PluginBase implements Listener {
+
+              /** Обработчик ответа формы. response == null, если форму закрыли. */
+              public interface FormHandler {
+                  void handle(Player player, FormResponse response);
+              }
+
+              /** Ожидающий телепорт (когда игрок вне спавна). */
+              private static class Session {
+                  final UUID id;
+                  final Player player;
+                  final String warpId;
+                  final Level level;
+                  final double x;
+                  final double y;
+                  final double z;
+                  final long endAt;
+                  int lastSec = -1;
+
+                  Session(Player p, String warpId, long endAt) {
+                      this.id = p.getUniqueId();
+                      this.player = p;
+                      this.warpId = warpId;
+                      this.level = p.getLevel();
+                      this.x = p.getX();
+                      this.y = p.getY();
+                      this.z = p.getZ();
+                      this.endAt = endAt;
+                  }
+              }
+
+              private WarpManager manager;
+              private final Map<UUID, Session> sessions = new HashMap<>();
+              private final Map<UUID, Long> cooldowns = new HashMap<>();
+              private final Map<UUID, Map<Integer, FormHandler>> forms = new HashMap<>();
+
+              // ------------------------------------------------------------------
+              // Жизненный цикл
+              // ------------------------------------------------------------------
+
+              @Override
+              public void onEnable() {
+                  getDataFolder().mkdirs();
+                  saveDefaultConfig();
+                  manager = new WarpManager(this);
+                  manager.load();
+                  getServer().getPluginManager().registerEvents(this, this);
+                  getServer().getScheduler().scheduleRepeatingTask(this, new Task() {
+                      @Override
+                      public void onRun(int currentTick) {
+                          try {
+                              tick();
+                          } catch (Throwable t) {
+                              logError(t);
+                          }
+                      }
+                  }, 5);
+                  getLogger().info("Warp включён, варпов: " + manager.all().size());
+              }
+
+              @Override
+              public void onDisable() {
+                  sessions.clear();
+                  forms.clear();
+                  if (manager != null) {
+                      manager.shutdown();
+                  }
+              }
+
+              private void logError(Throwable t) {
+                  try {
+                      getLogger().warning("Warp: " + t);
+                  } catch (Throwable ignored) {
+                      // логирование не должно ломать работу
+                  }
+              }
+
+              // ------------------------------------------------------------------
+              // Настройки и тексты
+              // ------------------------------------------------------------------
+
+              private int pageSize() {
+                  int v = getConfig().getInt("page-size", 8);
+                  return Math.max(1, Math.min(20, v));
+              }
+
+              private int maxName() {
+                  int v = getConfig().getInt("max-name-length", 20);
+                  return Math.max(1, Math.min(40, v));
+              }
+
+              private String msg(String key, String def, String... kv) {
+                  String s = getConfig().getString(key, def);
+                  if (s == null) {
+                      s = def;
+                  }
+                  for (int i = 0; i + 1 < kv.length; i += 2) {
+                      s = s.replace(kv[i], kv[i + 1]);
+                  }
+                  return Text.color(s);
+              }
+
+              private String prefix() {
+                  return msg("msg-prefix", "&6[Варп] &r");
+              }
+
+              private void say(Player p, String key, String def, String... kv) {
+                  p.sendMessage(prefix() + msg(key, def, kv));
+              }
+
+              /** Текст кнопки: жирный чёрный, хорошо читается на серых кнопках. */
+              private String btn(String text) {
+                  return "\u00A7l\u00A70" + text;
+              }
+
+              private String warpBtn(Warp w) {
+                  if (getConfig().getBoolean("button-keep-warp-colors", false)) {
+                      return "\u00A7l" + Text.color(w.name);
+                  }
+                  return btn(Text.plain(w.name));
+              }
+
+              private static String fmt(double v) {
+                  return String.format(Locale.ROOT, "%.1f", v);
+              }
+
+              // ------------------------------------------------------------------
+              // Миры
+              // ------------------------------------------------------------------
+
+              private String folder(Level l) {
+                  return l.getFolderName().toLowerCase(Locale.ROOT);
+              }
+
+              private boolean isSpawnLevel(Level l) {
+                  if (l == null) {
+                      return false;
+                  }
+                  String f = folder(l);
+                  List<String> cfgList = getConfig().getStringList("spawn-levels");
+                  if (!manager.spawnLevels.isEmpty() || (cfgList != null && !cfgList.isEmpty())) {
+                      if (manager.spawnLevels.contains(f)) {
+                          return true;
+                      }
+                      if (cfgList != null) {
+                          for (String s : cfgList) {
+                              if (s != null && s.trim().equalsIgnoreCase(f)) {
+                                  return true;
+                              }
+                          }
+                      }
+                      return false;
+                  }
+                  int id = getConfig().getInt("spawn-world-id", 8);
+                  if (id < 0) {
+                      return false;
+                  }
+                  List<String> patterns = getConfig().getStringList("spawn-world-name-patterns");
+                  if (patterns != null) {
+                      for (String pat : patterns) {
+                          if (pat != null && pat.replace("{id}", String.valueOf(id)).equalsIgnoreCase(f)) {
+                              return true;
+                          }
+                      }
+                  }
+                  return false;
+              }
+
+              private boolean isBlockedLevel(Level l) {
+                  if (l == null) {
+                      return false;
+                  }
+                  String f = folder(l);
+                  if (manager.blockedLevels.contains(f)) {
+                      return true;
+                  }
+                  List<String> cfgList = getConfig().getStringList("blocked-levels");
+                  if (cfgList != null) {
+                      for (String s : cfgList) {
+                          if (s != null && s.trim().equalsIgnoreCase(f)) {
+                              return true;
+                          }
+                      }
+                  }
+                  return false;
+              }
+
+              private boolean levelFolderExists(String name) {
+                  try {
+                      return new File(new File(getServer().getDataPath(), "worlds"), name).isDirectory();
+                  } catch (Throwable t) {
+                      return false;
+                  }
+              }
+
+              private boolean levelAvailable(String name) {
+                  try {
+                      return getServer().getLevelByName(name) != null || levelFolderExists(name);
+                  } catch (Throwable t) {
+                      return false;
+                  }
+              }
+
+              private Level resolveLevel(String name) {
+                  try {
+                      Level l = getServer().getLevelByName(name);
+                      if (l != null) {
+                          return l;
+                      }
+                      if (levelFolderExists(name) && getServer().loadLevel(name)) {
+                          return getServer().getLevelByName(name);
+                      }
+                  } catch (Throwable t) {
+                      logError(t);
+                  }
+                  return null;
+              }
+
+              private List<Warp> visibleWarps() {
+                  List<Warp> res = new ArrayList<>();
+                  for (Warp w : manager.all()) {
+                      if (w.enabled && levelAvailable(w.level)) {
+                          res.add(w);
+                      }
+                  }
+                  return res;
+              }
+
+              // ------------------------------------------------------------------
+              // Команды
+              // ------------------------------------------------------------------
+
+              @Override
+              public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+                  try {
+                      String name = command.getName().toLowerCase(Locale.ROOT);
+                      if (name.equals("warp")) {
+                          return cmdWarp(sender, args);
+                      }
+                      if (name.equals("warpadmin")) {
+                          return cmdAdmin(sender, args);
+                      }
+                  } catch (Throwable t) {
+                      logError(t);
+                  }
+                  return true;
+              }
+
+              private boolean cmdWarp(CommandSender sender, String[] args) {
+                  if (!(sender instanceof Player)) {
+                      sender.sendMessage("Эту команду можно использовать только в игре.");
+                      return true;
+                  }
+                  Player p = (Player) sender;
+                  if (args.length == 0) {
+                      openList(p, 0);
+                      return true;
+                  }
+                  Warp w = manager.byName(String.join(" ", args));
+                  requestTeleport(p, w);
+                  return true;
+              }
+
+              private boolean cmdAdmin(CommandSender sender, String[] args) {
+                  if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+                      if (!sender.hasPermission("warp.admin")) {
+                          return true;
+                      }
+                      reloadConfig();
+                      sender.sendMessage("Warp: настройки перезагружены.");
+                      return true;
+                  }
+                  if (!(sender instanceof Player)) {
+                      sender.sendMessage("Админ-панель открывается только в игре. Для перезагрузки настроек: /warpadmin reload");
+                      return true;
+                  }
+                  openAdminMain((Player) sender);
+                  return true;
+              }
+
+              // ------------------------------------------------------------------
+              // Телепорт
+              // ------------------------------------------------------------------
+
+              private void requestTeleport(Player p, Warp w) {
+                  if (w == null || !w.enabled || !levelAvailable(w.level)) {
+                      say(p, "msg-not-found", "&cВарп не найден.");
+                      return;
+                  }
+                  UUID uid = p.getUniqueId();
+                  if (sessions.containsKey(uid)) {
+                      say(p, "msg-already", "&cТелепорт уже идёт.");
+                      return;
+                  }
+                  if (isBlockedLevel(p.getLevel())) {
+                      say(p, "msg-blocked", "&cИз этого мира телепорт на варпы недоступен.");
+                      return;
+                  }
+                  if (isSpawnLevel(p.getLevel())) {
+                      doTeleport(p, w, false);
+                      return;
+                  }
+                  int cd = cooldownLeft(p);
+                  if (cd > 0) {
+                      say(p, "msg-cooldown", "&cПодождите ещё {sec} сек. перед следующим телепортом.", "{sec}", String.valueOf(cd));
+                      return;
+                  }
+                  int delay = getConfig().getInt("teleport-delay-seconds", 5);
+                  if (delay <= 0) {
+                      doTeleport(p, w, true);
+                      return;
+                  }
+                  sessions.put(uid, new Session(p, w.id, System.currentTimeMillis() + delay * 1000L));
+                  say(p, "msg-start", "&6Телепорт на варп &r{name}&6 через &e{sec}&6 сек. Не двигайтесь и избегайте урона.",
+                          "{name}", w.name, "{sec}", String.valueOf(delay));
+              }
+
+              private int cooldownLeft(Player p) {
+                  Long until = cooldowns.get(p.getUniqueId());
+                  if (until == null) {
+                      return 0;
+                  }
+                  long left = until - System.currentTimeMillis();
+                  if (left <= 0) {
+                      cooldowns.remove(p.getUniqueId());
+                      return 0;
+                  }
+                  return (int) Math.ceil(left / 1000.0);
+              }
+
+              private void doTeleport(Player p, Warp w, boolean applyCooldown) {
+                  Level lvl = resolveLevel(w.level);
+                  if (lvl == null) {
+                      return;
+                  }
+                  boolean ok;
+                  try {
+                      ok = p.teleport(new Location(w.x, w.y, w.z, w.yaw, w.pitch, lvl));
+                  } catch (Throwable t) {
+                      logError(t);
+                      return;
+                  }
+                  if (ok) {
+                      if (applyCooldown) {
+                          int cd = getConfig().getInt("cooldown-seconds", 5);
+                          if (cd > 0) {
+                              cooldowns.put(p.getUniqueId(), System.currentTimeMillis() + cd * 1000L);
+                          }
+                      }
+                      say(p, "msg-done", "&6Вы телепортированы на варп &r{name}&6.", "{name}", w.name);
+                  }
+              }
+
+              /** Вызывается каждые 5 тиков: ведёт обратный отсчёт ожидающих телепортов. */
+              private void tick() {
+                  if (sessions.isEmpty()) {
+                      return;
+                  }
+                  long now = System.currentTimeMillis();
+                  boolean cancelMove = getConfig().getBoolean("cancel-on-move", true);
+                  double tol = getConfig().getDouble("move-tolerance", 0.35);
+                  for (Session s : new ArrayList<>(sessions.values())) {
+                      Player p = s.player;
+                      if (p == null || !p.isOnline() || !p.isAlive() || p.getLevel() != s.level) {
+                          sessions.remove(s.id);
+                          continue;
+                      }
+                      if (cancelMove) {
+                          double dx = p.getX() - s.x;
+                          double dy = p.getY() - s.y;
+                          double dz = p.getZ() - s.z;
+                          if (dx * dx + dy * dy + dz * dz > tol * tol) {
+                              sessions.remove(s.id);
+                              say(p, "msg-cancel-move", "&cТелепорт отменён: вы подвигались.");
+                              continue;
+                          }
+                      }
+                      long left = s.endAt - now;
+                      if (left <= 0) {
+                          sessions.remove(s.id);
+                          Warp w = manager.byId(s.warpId);
+                          if (w != null && w.enabled) {
+                              doTeleport(p, w, true);
+                          }
+                          continue;
+                      }
+                      int sec = (int) Math.ceil(left / 1000.0);
+                      if (sec != s.lastSec) {
+                          s.lastSec = sec;
+                          p.sendTip(msg("msg-countdown", "&6Телепорт через &e{sec}&6 сек.", "{sec}", String.valueOf(sec)));
+                      }
+                  }
+              }
+
+              // ------------------------------------------------------------------
+              // События
+              // ------------------------------------------------------------------
+
+              @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+              public void onDamage(EntityDamageEvent e) {
+                  try {
+                      if (!(e.getEntity() instanceof Player)) {
+                          return;
+                      }
+                      Player p = (Player) e.getEntity();
+                      if (!getConfig().getBoolean("cancel-on-damage", true)) {
+                          return;
+                      }
+                      if (sessions.remove(p.getUniqueId()) != null) {
+                          say(p, "msg-cancel-damage", "&cТелепорт отменён: вы получили урон.");
+                      }
+                  } catch (Throwable t) {
+                      logError(t);
+                  }
+              }
+
+              @EventHandler
+              public void onQuit(PlayerQuitEvent e) {
+                  UUID id = e.getPlayer().getUniqueId();
+                  sessions.remove(id);
+                  forms.remove(id);
+                  cooldownLeft(e.getPlayer());
+              }
+
+              @EventHandler
+              public void onForm(PlayerFormRespondedEvent e) {
+                  Player p = e.getPlayer();
+                  Map<Integer, FormHandler> m = forms.get(p.getUniqueId());
+                  if (m == null) {
+                      return;
+                  }
+                  FormHandler h = m.remove(e.getFormID());
+                  if (h == null) {
+                      return;
+                  }
+                  try {
+                      FormResponse r = e.wasClosed() ? null : e.getResponse();
+                      h.handle(p, r);
+                  } catch (Throwable t) {
+                      logError(t);
+                  }
+              }
+
+              // ------------------------------------------------------------------
+              // Формы: общие функции
+              // ------------------------------------------------------------------
+
+              private void openForm(Player p, FormWindow w, FormHandler h) {
+                  try {
+                      int id = p.showFormWindow(w);
+                      Map<Integer, FormHandler> m = forms.computeIfAbsent(p.getUniqueId(), k -> new HashMap<>());
+                      if (m.size() > 16) {
+                          m.clear();
+                      }
+                      m.put(id, h);
+                  } catch (Throwable t) {
+                      logError(t);
+                  }
+              }
+
+              /** Простое меню с кнопками; acts.get(i) вызывается при нажатии на кнопку i (null = ничего). */
+              private void menu(Player p, String title, String content, List<String> labels, List<Consumer<Player>> acts) {
+                  FormWindowSimple f = new FormWindowSimple(title, content);
+                  for (String l : labels) {
+                      f.addButton(new ElementButton(l));
+                  }
+                  openForm(p, f, (pl, r) -> {
+                      if (r instanceof FormResponseSimple) {
+                          int id = ((FormResponseSimple) r).getClickedButtonId();
+                          if (id >= 0 && id < acts.size()) {
+                              Consumer<Player> a = acts.get(id);
+                              if (a != null) {
+                                  a.accept(pl);
+                              }
+                          }
+                      }
+                  });
+              }
+
+              private String inputOf(FormResponseCustom r, int idx) {
+                  try {
+                      String s = r.getInputResponse(idx);
+                      return s == null ? "" : s;
+                  } catch (Throwable t) {
+                      try {
+                          Object o = r.getResponse(idx);
+                          return o == null ? "" : o.toString();
+                      } catch (Throwable t2) {
+                          return "";
+                      }
+                  }
+              }
+
+              // ------------------------------------------------------------------
+              // Меню игрока: /warp
+              // ------------------------------------------------------------------
+
+              private void openList(Player p, int page) {
+                  List<Warp> list = visibleWarps();
+                  int size = pageSize();
+                  int pages = Math.max(1, (list.size() + size - 1) / size);
+                  final int cur = Math.max(0, Math.min(page, pages - 1));
+                  List<String> labels = new ArrayList<>();
+                  List<Consumer<Player>> acts = new ArrayList<>();
+                  int from = cur * size;
+                  int to = Math.min(list.size(), from + size);
+                  for (int i = from; i < to; i++) {
+                      final String id = list.get(i).id;
+                      labels.add(warpBtn(list.get(i)));
+                      acts.add(pl -> requestTeleport(pl, manager.byId(id)));
+                  }
+                  if (cur > 0) {
+                      labels.add(btn("<< Назад"));
+                      acts.add(pl -> openList(pl, cur - 1));
+                  }
+                  if (cur < pages - 1) {
+                      labels.add(btn("Вперёд >>"));
+                      acts.add(pl -> openList(pl, cur + 1));
+                  }
+                  if (list.isEmpty()) {
+                      labels.add(btn("Закрыть"));
+                      acts.add(null);
+                  }
+                  String content = list.isEmpty()
+                          ? "Варпов пока нет."
+                          : "Выберите варп для телепорта.\nСтраница " + (cur + 1) + " из " + pages;
+                  menu(p, "Варпы", content, labels, acts);
+              }
+
+              // ------------------------------------------------------------------
+              // Админ-панель: /warpadmin
+              // ------------------------------------------------------------------
+
+              private boolean isAdmin(Player p) {
+                  return p.hasPermission("warp.admin");
+              }
+
+              private void openAdminMain(Player p) {
+                  if (!isAdmin(p)) {
+                      return;
+                  }
+                  List<String> labels = Arrays.asList(btn("Создать варп"), btn("Список варпов"), btn("Миры"), btn("Закрыть"));
+                  List<Consumer<Player>> acts = new ArrayList<>();
+                  acts.add(this::openCreate);
+                  acts.add(pl -> openAdminList(pl, 0));
+                  acts.add(this::openWorlds);
+                  acts.add(null);
+                  menu(p, "Варпы: админ-панель", "Всего варпов: " + manager.all().size(), labels, acts);
+              }
+
+              private String cleanName(String in) {
+                  return in.replace('\u00A7', '&').trim().replaceAll("\\s+", " ");
+              }
+
+              /** Возвращает текст ошибки или null, если название подходит. */
+              private String validateName(String input, String exceptId) {
+                  String name = cleanName(input == null ? "" : input);
+                  String plain = Text.plain(name);
+                  if (plain.isEmpty()) {
+                      return "Название не может быть пустым.";
+                  }
+                  if (plain.length() > maxName()) {
+                      return "Название длиннее " + maxName() + " символов.";
+                  }
+                  if (name.length() > 100) {
+                      return "Название слишком длинное.";
+                  }
+                  if (!Text.validChars(plain)) {
+                      return "В названии можно использовать только буквы, цифры, пробел и дефис.";
+                  }
+                  if (manager.nameTaken(plain, exceptId)) {
+                      return "Варп с таким названием уже есть.";
+                  }
+                  return null;
+              }
+
+              private void openCreate(Player p) {
+                  if (!isAdmin(p)) {
+                      return;
+                  }
+                  FormWindowCustom f = new FormWindowCustom("Создать варп");
+                  f.addElement(new ElementInput(
+                          "Название варпа (до " + maxName() + " символов, цвета через &). Варп создастся в вашей точке.",
+                          "Например: &6Арена", ""));
+                  openForm(p, f, (pl, r) -> {
+                      if (!(r instanceof FormResponseCustom) || !isAdmin(pl)) {
+                          return;
+                      }
+                      String input = inputOf((FormResponseCustom) r, 0);
+                      String err = validateName(input, null);
+                      if (err != null) {
+                          pl.sendMessage(prefix() + "\u00A7c" + err);
+                          openCreate(pl);
+                          return;
+                      }
+                      Warp w = manager.create(cleanName(input), pl.getLevel().getFolderName(),
+                              pl.getX(), pl.getY(), pl.getZ(), pl.getYaw(), pl.getPitch());
+                      pl.sendMessage(prefix() + "\u00A76Варп создан: \u00A7r" + Text.color(w.name));
+                      openEdit(pl, w.id);
+                  });
+              }
+
+              private void openAdminList(Player p, int page) {
+                  if (!isAdmin(p)) {
+                      return;
+                  }
+                  List<Warp> list = manager.all();
+                  int size = pageSize();
+                  int pages = Math.max(1, (list.size() + size - 1) / size);
+                  final int cur = Math.max(0, Math.min(page, pages - 1));
+                  List<String> labels = new ArrayList<>();
+                  List<Consumer<Player>> acts = new ArrayList<>();
+                  int from = cur * size;
+                  int to = Math.min(list.size(), from + size);
+                  for (int i = from; i < to; i++) {
+                      Warp w = list.get(i);
+                      final String id = w.id;
+                      String status = "";
+                      if (!w.enabled) {
+                          status = " (выкл)";
+                      } else if (!levelAvailable(w.level)) {
+                          status = " (нет мира)";
+                      }
+                      labels.add(btn(Text.plain(w.name) + status));
+                      acts.add(pl -> openEdit(pl, id));
+                  }
+                  if (cur > 0) {
+                      labels.add(btn("<< Назад"));
+                      acts.add(pl -> openAdminList(pl, cur - 1));
+                  }
+                  if (cur < pages - 1) {
+                      labels.add(btn("Вперёд >>"));
+                      acts.add(pl -> openAdminList(pl, cur + 1));
+                  }
+                  labels.add(btn("В админ-панель"));
+                  acts.add(this::openAdminMain);
+                  String content = list.isEmpty()
+                          ? "Варпов пока нет. Создайте первый в админ-панели."
+                          : "Выберите варп для настройки.\nСтраница " + (cur + 1) + " из " + pages;
+                  menu(p, "Варпы: список", content, labels, acts);
+              }
+
+              private void openEdit(Player p, String id) {
+                  if (!isAdmin(p)) {
+                      return;
+                  }
+                  Warp w = manager.byId(id);
+                  if (w == null) {
+                      openAdminList(p, 0);
+                      return;
+                  }
+                  String content = "Название: " + Text.color(w.name) + "\u00A7r"
+                          + "\nМир: " + w.level + (levelAvailable(w.level) ? "" : " (недоступен)")
+                          + "\nКоординаты: " + fmt(w.x) + ", " + fmt(w.y) + ", " + fmt(w.z)
+                          + "\nСостояние: " + (w.enabled ? "включён" : "выключен");
+                  List<String> labels = new ArrayList<>();
+                  List<Consumer<Player>> acts = new ArrayList<>();
+
+                  labels.add(btn("Телепортироваться"));
+                  acts.add(pl -> {
+                      Warp x = manager.byId(id);
+                      if (x != null) {
+                          doTeleport(pl, x, false);
+                      }
+                  });
+
+                  labels.add(btn("Переименовать"));
+                  acts.add(pl -> openRename(pl, id));
+
+                  labels.add(btn("Перенести в мою точку"));
+                  acts.add(pl -> {
+                      Warp x = manager.byId(id);
+                      if (x != null) {
+                          x.level = pl.getLevel().getFolderName();
+                          x.x = pl.getX();
+                          x.y = pl.getY();
+                          x.z = pl.getZ();
+                          x.yaw = pl.getYaw();
+                          x.pitch = pl.getPitch();
+                          manager.save();
+                          pl.sendMessage(prefix() + "\u00A76Варп перенесён в вашу точку.");
+                      }
+                      openEdit(pl, id);
+                  });
+
+                  labels.add(btn(w.enabled ? "Выключить" : "Включить"));
+                  acts.add(pl -> {
+                      Warp x = manager.byId(id);
+                      if (x != null) {
+                          x.enabled = !x.enabled;
+                          manager.save();
+                      }
+                      openEdit(pl, id);
+                  });
+
+                  labels.add(btn("Выше в списке"));
+                  acts.add(pl -> {
+                      Warp x = manager.byId(id);
+                      if (x != null) {
+                          manager.move(x, -1);
+                      }
+                      openEdit(pl, id);
+                  });
+
+                  labels.add(btn("Ниже в списке"));
+                  acts.add(pl -> {
+                      Warp x = manager.byId(id);
+                      if (x != null) {
+                          manager.move(x, 1);
+                      }
+                      openEdit(pl, id);
+                  });
+
+                  labels.add(btn("Удалить"));
+                  acts.add(pl -> openDeleteConfirm(pl, id));
+
+                  labels.add(btn("Назад к списку"));
+                  acts.add(pl -> openAdminList(pl, 0));
+
+                  menu(p, "Варп", content, labels, acts);
+              }
+
+              private void openRename(Player p, String id) {
+                  if (!isAdmin(p)) {
+                      return;
+                  }
+                  Warp w = manager.byId(id);
+                  if (w == null) {
+                      openAdminList(p, 0);
+                      return;
+                  }
+                  FormWindowCustom f = new FormWindowCustom("Переименовать варп");
+                  f.addElement(new ElementInput(
+                          "Новое название (до " + maxName() + " символов, цвета через &)", "", w.name));
+                  openForm(p, f, (pl, r) -> {
+                      if (!(r instanceof FormResponseCustom) || !isAdmin(pl)) {
+                          return;
+                      }
+                      Warp x = manager.byId(id);
+                      if (x == null) {
+                          openAdminList(pl, 0);
+                          return;
+                      }
+                      String input = inputOf((FormResponseCustom) r, 0);
+                      String err = validateName(input, x.id);
+                      if (err != null) {
+                          pl.sendMessage(prefix() + "\u00A7c" + err);
+                          openRename(pl, id);
+                          return;
+                      }
+                      x.name = cleanName(input);
+                      manager.save();
+                      pl.sendMessage(prefix() + "\u00A76Название изменено: \u00A7r" + Text.color(x.name));
+                      openEdit(pl, id);
+                  });
+              }
+
+              private void openDeleteConfirm(Player p, String id) {
+                  if (!isAdmin(p)) {
+                      return;
+                  }
+                  Warp w = manager.byId(id);
+                  if (w == null) {
+                      openAdminList(p, 0);
+                      return;
+                  }
+                  List<String> labels = Arrays.asList(btn("Да, удалить"), btn("Отмена"));
+                  List<Consumer<Player>> acts = new ArrayList<>();
+                  acts.add(pl -> {
+                      Warp x = manager.byId(id);
+                      if (x != null) {
+                          manager.remove(x);
+                          pl.sendMessage(prefix() + "\u00A76Варп удалён.");
+                      }
+                      openAdminList(pl, 0);
+                  });
+                  acts.add(pl -> openEdit(pl, id));
+                  menu(p, "Удалить варп?", "Удалить варп " + Text.color(w.name) + "\u00A7r без возможности восстановления?", labels, acts);
+              }
+
+              private void openWorlds(Player p) {
+                  if (!isAdmin(p)) {
+                      return;
+                  }
+                  final Level level = p.getLevel();
+                  final String f = folder(level);
+                  boolean spawnSet = manager.spawnLevels.contains(f);
+                  boolean blockedSet = manager.blockedLevels.contains(f);
+                  String content = "Ваш текущий мир: " + level.getFolderName()
+                          + "\nСпавн (мгновенный телепорт): " + (isSpawnLevel(level) ? "да" : "нет")
+                          + "\nТелепорт на варпы из этого мира запрещён: " + (isBlockedLevel(level) ? "да" : "нет")
+                          + "\n\nВстаньте в нужный мир и нажмите кнопку.";
+                  List<String> labels = new ArrayList<>();
+                  List<Consumer<Player>> acts = new ArrayList<>();
+
+                  labels.add(btn(spawnSet ? "Убрать этот мир из спавнов" : "Назначить этот мир спавном"));
+                  acts.add(pl -> {
+                      if (!manager.spawnLevels.remove(f)) {
+                          manager.spawnLevels.add(f);
+                      }
+                      manager.save();
+                      openWorlds(pl);
+                  });
+
+                  labels.add(btn(blockedSet ? "Разрешить телепорт из этого мира" : "Запретить телепорт из этого мира"));
+                  acts.add(pl -> {
+                      if (!manager.blockedLevels.remove(f)) {
+                          manager.blockedLevels.add(f);
+                      }
+                      manager.save();
+                      openWorlds(pl);
+                  });
+
+                  labels.add(btn("В админ-панель"));
+                  acts.add(this::openAdminMain);
+
+                  menu(p, "Варпы: миры", content, labels, acts);
+              }
+          }
+          EOF_PLUGIN
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build with Maven
+        working-directory: plugin
+        run: |
+          mvn -B -q package || mvn -B -q package -Dnukkit.groupId=com.nukkit-mot -Dnukkit.artifactId=nukkit-mot -Dnukkit.version=1.26.40-R1
+
+      - name: Upload plugin jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: Warp
+          path: plugin/target/Warp-1.0.0.jar
+          if-no-files-found: error
